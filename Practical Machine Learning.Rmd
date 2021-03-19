@@ -1,0 +1,187 @@
+---
+title: 'Practical Machine Learning Project : Prediction Assignment Writeup'
+author: "George Farmer"
+date: "3/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+This document is the final report of the Peer Assessment project from Coursera’s course Practical Machine Learning, as part of the Specialization in Data Science. It was built up in RStudio, using its knitr functions, meant to be published in html format.
+This analysis meant to be the basis for the course quiz and a prediction assignment writeup. The main goal of the project is to predict the manner in which 6 participants performed some exercise as described below. This is the “classe” variable in the training set. The machine learning algorithm described here is applied to the 20 test cases available in the test data and the predictions are submitted in appropriate format to the Course Project Prediction Quiz for automated grading.
+
+
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3xsbS5bVX
+
+
+
+## Data Loading and Exploratory Analysis
+### Dataset Overview
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from http://groupware.les.inf.puc-rio.br/har. Full source:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. “Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13)”. Stuttgart, Germany: ACM SIGCHI, 2013.
+
+My special thanks to the above mentioned authors for being so generous in allowing their data to be used for this kind of assignment.
+
+A short description of the datasets content from the authors’ website:
+
+“Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg)."
+
+### Data Loading
+
+The next step is loading the dataset from the URL provided above. The Training data will be used for training and the Testing data will be used for testing. But for the sake of time, that will not be displayed. Just know that we will be loading libraries such as caret, rpart, rattle, randomForest, Corrplot, and downloading testing and training files.
+
+```{r echo = FALSE}
+{warning = FALSE}
+{message = FALSE}
+{error = FALSE}
+here <- getwd()
+setwd(here)
+library(ggplot2)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+
+UrlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+UrlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+destFile1 <- "training.csv"
+destFile2 <- "testing.csv"
+
+download.file(UrlTrain, destFile1)
+download.file(UrlTest, destFile2)
+```
+From here we will now be cleaning up the files as the files themselves have a lot of null values and near zero values. Also will not be shown as it is a lot of "house cleaning".
+
+```{r echo = FALSE}
+
+training <- read.csv(file = "training.csv") #setting value as the training set
+testing  <- read.csv(file = "testing.csv") #setting value as the testing set
+
+NZV <- nearZeroVar(training) #removing 'near zero variants'
+TrainSet <- training[, -NZV]
+TestSet  <- testing[, -NZV]
+
+
+AllNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95 #removing NA values from the data set 
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet  <- TestSet[, AllNA==FALSE]
+
+TrainSet <- TrainSet[, -(1:5)] #removing identification only values essentially rows 1 through 5
+TestSet  <- TestSet[, -(1:5)]
+
+```
+
+At this point our data is cleaned and presentable and ready to be worked with.
+
+```{r echo = TRUE}
+dim(training)
+```
+The original file having 160 seperate variables, and the cleaned file having 54 variables.
+
+```{r echo = TRUE}
+dim(TrainSet)
+```
+
+### Correlation Analysis
+
+A correlation among variables is analysed before proceeding to the modeling procedures.
+
+```{r echo = TRUE}
+corMatrix <- cor(TrainSet[, -54])
+corrplot(corMatrix, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+It maybe a little hard to read the variables, but some nice grouping patterns appear in the data. Light red areas, dark blue areas, and light blue areas with some very interesting patterns emerging.
+
+### Prediction Model building
+
+Next we are going to use three different methods to predict the quiz answers, Random Forest, Decision Tree, and a General Boosted Model.
+
+#### Random Forest
+
+```{r echo = TRUE}
+
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+TrainRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+TrainRandForest$finalModel
+
+```
+
+```{r echo= TRUE}
+predictRandForest <- predict(TrainRandForest, newdata=TrainSet)
+
+#Confusion Matrix to determine accuracy
+caret::confusionMatrix(predictRandForest, as.factor(TrainSet$classe))
+
+```
+
+#### Decision Tree
+
+```{r echo= TRUE}
+TrainDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(TrainDecTree)
+
+```
+
+```{r echo = TRUE}
+predictDecTree <- predict(TrainDecTree, newdata=TrainSet, type="class")
+caret::confusionMatrix(predictDecTree, as.factor(TrainSet$classe))
+
+```
+
+#### General Boosted Model
+
+```{r echo = TRUE}
+
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+TrainGBM  <- train(classe ~ ., data=TrainSet, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+TrainGBM$finalModel
+```
+
+```{r echo = TRUE}
+
+predictGBM <- predict(TrainGBM, newdata=TrainSet)
+caret::confusionMatrix(predictGBM, as.factor(TrainSet$classe))
+
+```
+
+### Applying Model
+
+The option is really no contest as the Random Forest tree has 100% accuracy rating which was figures I really was not expecting.
+
+#### Testing Random Forest
+
+```{echo = TRUE}
+
+predictRandForest <- predict(TrainRandForest, newdata=TestSet)
+predictRandForest
+
+```
+
+Ok, for reasons I don't understand entirely the code posted above brought back absolute nonsense, but when placed in the console:
+
+[1] B A B A A E D B A A B C B A E E A B B B
+Levels: A B C D E
